@@ -34,6 +34,21 @@ case class WidthGeqConstraintAnnotation(loc: ReferenceTarget, exp: ReferenceTarg
 }
 
 class InferWidths extends Transform with ResolvedAnnotationPaths {
+
+  override def prerequisites: Set[Class[Transform]] =
+    Set[Class[Transform]]( classOf[passes.CheckHighForm],
+                           classOf[passes.ResolveKinds],
+                           classOf[passes.InferTypes],
+                           classOf[passes.Uniquify],
+                           classOf[passes.ResolveGenders],
+                           classOf[passes.CheckGenders] ) ++ firrtl.stage.Forms.WorkingIR
+
+  override def invalidates(a: Transform): Boolean = a match {
+    case _: CheckWidths => true
+    case _              => false
+  }
+
+
   def inputForm: CircuitForm = UnknownForm
   def outputForm: CircuitForm = UnknownForm
 
@@ -182,18 +197,18 @@ class InferWidths extends Transform with ResolvedAnnotationPaths {
       rec(w)
       has
     }
- 
+
     //; Forward solve
     //; Returns a solved list where each constraint undergoes:
     //;  1) Continuous Solving (using triangular solving)
     //;  2) Remove Cycles
     //;  3) Move to solved if not self-recursive
     val u = make_unique(l)
-    
+
     //println("======== UNIQUE CONSTRAINTS ========")
     //for (x <- u) { println(x) }
     //println("====================================")
- 
+
     val f = new ConstraintMap
     val o = ArrayBuffer[String]()
     for ((n, e) <- u) {
@@ -219,10 +234,10 @@ class InferWidths extends Transform with ResolvedAnnotationPaths {
         o += n
       }
     }
- 
+
     //println("Forward Solved Constraints")
     //for (x <- f) println(x)
- 
+
     //; Backwards Solve
     val b = new ConstraintMap
     for (i <- (o.size - 1) to 0 by -1) {
@@ -279,7 +294,7 @@ class InferWidths extends Transform with ResolvedAnnotationPaths {
     }
 
     def get_constraints_declared_type (t: Type): Type = t match {
-      case FixedType(_, p) => 
+      case FixedType(_, p) =>
         v += WGeq(p,IntWidth(0))
         t
       case _ => t map get_constraints_declared_type
@@ -316,7 +331,7 @@ class InferWidths extends Transform with ResolvedAnnotationPaths {
                get_constraints_t(UIntType(IntWidth(1)), s.reset.tpe))
            }
           v ++= get_constraints_t(s.tpe, s.init.tpe)
-        case (s:Conditionally) => v ++= 
+        case (s:Conditionally) => v ++=
            get_constraints_t(s.pred.tpe, UIntType(IntWidth(1))) ++
            get_constraints_t(UIntType(IntWidth(1)), s.pred.tpe)
         case Attach(_, exprs) =>
@@ -392,7 +407,8 @@ class InferWidths extends Transform with ResolvedAnnotationPaths {
       Port(p.info, p.name, p.direction, reduce_var_widths_t(p.tpe))
     }
 
-    InferTypes.run(c.copy(modules = c.modules map (_
+    /* @todo: This should be moved outside of [[InferWidths]] */
+    (new InferTypes).run(c.copy(modules = c.modules map (_
       map reduce_var_widths_p
       map reduce_var_widths_s)))
   }
